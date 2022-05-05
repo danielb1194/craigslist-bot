@@ -300,16 +300,19 @@ def keywords_handler(update: Update, context: CallbackContext) -> int:
 
     else:
         # save the message from the user to the keywords
-        data[str(update.effective_chat.id)]['keywords'] = update.message.text
+        data[str(update.effective_chat.id)]['keywords'].append(
+            update.message.text)
 
-    keyboard = [
-        [InlineKeyboardButton("✅ Done", callback_data='done'),
-         InlineKeyboardButton("Cancel", callback_data='cancel')]
-    ]
+    keyboard = []
+    for kw in data[str(update.effective_chat.id)]['keywords']:
+        keyboard.append([InlineKeyboardButton(f'❌ {kw}', callback_data=kw)])
+
+    keyboard.append([InlineKeyboardButton("✅ Done", callback_data='done'),
+                     InlineKeyboardButton("Cancel", callback_data='cancel')])
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f'💾 Saved your keywords:\n\n"{data[str(update.effective_chat.id)]["keywords"]}"\n\nTap "Done" to continue or send me your keywords again to replace them',
+        text=f'💾 Saved your keywords:\n\n"{", ".join(data[str(update.effective_chat.id)]["keywords"])}"\n\nTap "Done" to continue or send me your keywords again to replace them',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -429,10 +432,12 @@ def stop(update: Update, context: CallbackContext) -> int:
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f'Stoped your periodic search for "{data[id_str]["keywords"]}" 🛑'
+        text=f'Stoped your periodic search for "{", ".join(data[id_str]["keywords"])}" 🛑'
     )
 
     data[id_str]['is_stopped'] = True
+
+    data[id_str]['last_search_at'] = None
 
     # update the file
     with open('jobs.json', 'w') as outfile:

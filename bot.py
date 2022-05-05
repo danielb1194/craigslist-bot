@@ -146,36 +146,43 @@ def scheduled_search(context: CallbackContext) -> None:
         # execute any pending jobs
         # one search per city
         for city in data[key]['cities']:
-            cl_search = CraigslistForSale(
-                site=city['value'],
-                area=None,
-                category=data[key]['category'],
-                filters={'query': data[key]['keywords']}
-            )
-
-            approx_result_count = cl_search.get_results_approx_count()
-            if not approx_result_count or approx_result_count == 0:
-                context.bot.send_message(
-                    chat_id=data[key]['chat_id'],
-                    text=f'👀 Oops..\n\nYour search for "{data[key]["keywords"]}" in {city["text"]} is empty\n\nWe could not find anything 😥'
-                )
-                continue
-
-            context.bot.send_message(
-                chat_id=data[key]['chat_id'],
-                text=f'The results you requested 👇'
-            )
-
-            for result in cl_search.get_results(sort_by='newest', geotagged=True, limit=5):
-                context.bot.send_message(
-                    chat_id=data[key]['chat_id'],
-                    text=f'{result["name"]}\nPrice: {result["price"]}\n\nWhere: {result["geotag"] if "geotag" in result else "No location"}\n\nURL:{result["url"]}'
+            # one search per keyword
+            for kw in data[key]['keywords']:
+                cl_search = CraigslistForSale(
+                    log_level=logging.WARNING,
+                    site=city['value'],
+                    area=None,
+                    category=data[key]['category'],
+                    filters={
+                        'query': kw,
+                        'condition': ['like new', 'excellent', 'good', 'fair'],
+                        'owner_type': 'owner'
+                    }
                 )
 
-            context.bot.send_message(
-                chat_id=data[key]['chat_id'],
-                text=f'These are the results from your scheduled search in {city["text"]} 👆\n\nYou are receiving these results every {data[key]["period"]} minutes'
-            )
+                approx_result_count = cl_search.get_results_approx_count()
+                if not approx_result_count or approx_result_count == 0:
+                    context.bot.send_message(
+                        chat_id=data[key]['chat_id'],
+                        text=f'👀 Oops..\n\nYour search for "{kw}" in {city["text"]} is empty\n\nWe could not find anything 😥'
+                    )
+                    continue
+
+                context.bot.send_message(
+                    chat_id=data[key]['chat_id'],
+                    text=f'The search results for "{kw}" you requested in {city["value"]} 👇'
+                )
+
+                for result in cl_search.get_results(limit=10, include_details=True):
+                    context.bot.send_message(
+                        chat_id=data[key]['chat_id'],
+                        text=f'{result["name"]}\n\nPrice: {result["price"]}\n\nWhere: {result["where"]}\n\nCondition: {result["condition"]}\n\nURL: {result["url"]}'
+                    )
+
+                context.bot.send_message(
+                    chat_id=data[key]['chat_id'],
+                    text=f'These are the results from your scheduled search for "{kw}" in {city["text"]} 👆\n\nYou are receiving these results every {data[key]["period"]} minutes'
+                )
 
         context.bot.send_message(
             chat_id=data[key]['chat_id'],
