@@ -2,8 +2,6 @@ from datetime import datetime, timedelta
 import json
 import logging
 import os
-import re
-import smtplib
 import ssl
 import sys
 
@@ -18,9 +16,9 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler
 )
-from constants import CONFIRM_CITIES, KEYWORDS, CHOOSE_CITIES, CHOOSE_STATE, CHOOSE_CATEGORY, REQUEST_PERIOD
+from constants import CONFIRM_CITIES, KEYWORDS, CHOOSE_CITIES, CHOOSE_STATE, SELECT_CATEGORY, PRICE, REQUEST_PERIOD
 
-from conversations import bye, cancel, category_handler, city_handler, confirm_cities, get_searches, keywords_handler, period_handler, resume, start, stop, timeout, state_handler
+from conversations import bye, cancel, category_handler, city_handler, confirm_cities, get_searches, keywords_handler, period_handler, price_handler, resume, start, stop, timeout, state_handler
 
 from craigslist import CraigslistForSale
 
@@ -80,7 +78,12 @@ def main():
                 MessageHandler(Filters.text & ~(
                     Filters.command), keywords_handler)
             ],
-            CHOOSE_CATEGORY: [
+            PRICE: [
+                CallbackQueryHandler(price_handler),
+                MessageHandler(Filters.text & ~(
+                    Filters.command), price_handler)
+            ],
+            SELECT_CATEGORY: [
                 CallbackQueryHandler(category_handler)
             ],
             REQUEST_PERIOD: [
@@ -152,11 +155,12 @@ def scheduled_search(context: CallbackContext) -> None:
                     log_level=logging.WARNING,
                     site=city['value'],
                     area=None,
-                    category=data[key]['category'],
+                    category=data[key]['keywords'][kw]['category'],
                     filters={
                         'query': kw,
                         'condition': ['like new', 'excellent', 'good', 'fair'],
-                        'owner_type': 'owner'
+                        'owner_type': 'owner',
+                        'max_price': data[key]['keywords'][kw]['max_price']
                     }
                 )
 
@@ -164,7 +168,7 @@ def scheduled_search(context: CallbackContext) -> None:
                 if not approx_result_count or approx_result_count == 0:
                     context.bot.send_message(
                         chat_id=data[key]['chat_id'],
-                        text=f'👀 Oops..\n\nYour search for "{kw}" in {city["text"]} is empty\n\nWe could not find anything 😥'
+                        text=f'Your search for "{kw}" in {city["text"]} is empty 🤔'
                     )
                     continue
 

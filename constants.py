@@ -1,13 +1,11 @@
 """Constants and type definitions"""
 
 
-from copyreg import constructor
-
 from telegram import InlineKeyboardButton
 
 # the conversation states
-CHOOSE_STATE, CHOOSE_CITIES, KEYWORDS, CHOOSE_CATEGORY, REQUEST_PERIOD, CONFIRM_CITIES = range(
-    6)
+CHOOSE_STATE, CHOOSE_CITIES, KEYWORDS, SELECT_CATEGORY, REQUEST_PERIOD, CONFIRM_CITIES, PRICE = range(
+    7)
 
 
 class Area:

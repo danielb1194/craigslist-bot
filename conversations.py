@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+from sre_parse import CATEGORIES
 from time import strftime
 from unicodedata import category
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -8,7 +9,7 @@ from telegram.ext import (
     ConversationHandler
 )
 
-from constants import CONFIRM_CITIES, CRAIGSLIST_CATEGORIES, KEYWORDS, CHOOSE_CITIES, CHOOSE_STATE, CHOOSE_CATEGORY, REQUEST_PERIOD, STATES
+from constants import CONFIRM_CITIES, CRAIGSLIST_CATEGORIES, KEYWORDS, CHOOSE_CITIES, CHOOSE_STATE, SELECT_CATEGORY, PRICE, REQUEST_PERIOD, STATES
 
 data = None
 with open('jobs.json') as json_file:
@@ -174,7 +175,7 @@ def confirm_cities(update: Update, context: CallbackContext) -> int:
         return cancel()
 
     if query.data == 'confirm':
-        data[str(update.effective_chat.id)]['keywords'] = list()
+        data[str(update.effective_chat.id)]['keywords'] = dict()
 
         query.edit_message_text(
             text='Perfect! Now please type the keywords for your search 🔎',
@@ -260,6 +261,8 @@ def keywords_handler(update: Update, context: CallbackContext) -> int:
 
     # if we entered the handle via query
     query = update.callback_query
+    user_data = data[str(update.effective_chat.id)]
+
     if query:
         query.answer()
 
@@ -267,56 +270,199 @@ def keywords_handler(update: Update, context: CallbackContext) -> int:
             return cancel()
 
         if query.data == 'done':
-            if len(data[str(update.effective_chat.id)]['keywords']) < 1:
+            if len(user_data['keywords']) < 1:
                 keyboard = [
                     [InlineKeyboardButton("✅ Done", callback_data='done'),
                      InlineKeyboardButton("Cancel", callback_data='cancel')]
                 ]
 
                 query.edit_message_text(
-                    text=f'❌ You need to send me at least one keyword',
+                    text=f'You need to send at least one keyword 🤖',
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return KEYWORDS
+
             keyboard = [
-                [InlineKeyboardButton(
-                    text=CRAIGSLIST_CATEGORIES[category].capitalize(), callback_data=category)]
-                for category in CRAIGSLIST_CATEGORIES.keys()
+                [InlineKeyboardButton("5 minutes", callback_data='5'),
+                    InlineKeyboardButton("10 minutes", callback_data='10')],
+                [InlineKeyboardButton("15 minutes", callback_data='15'),
+                    InlineKeyboardButton("30 minutes", callback_data='30')],
+                [InlineKeyboardButton("60 minutes", callback_data='60'),
+                    InlineKeyboardButton("90 minutes", callback_data='90')],
+                [InlineKeyboardButton("Just return the results now", callback_data='no_period'),
+                    InlineKeyboardButton("Cancel", callback_data='cancel')]
             ]
 
-            keyboard.append(
-                [InlineKeyboardButton("Cancel", callback_data='cancel')])
-
             query.edit_message_text(
-                text='Please select the categories that you want to use 👇',
+                text=f'Looking good! 😎\n\nNow if you want to periodically search this, choose a time period for your search ⌚',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            return CHOOSE_CATEGORY
 
-        # remove the tapped keyword from the array
-        index = data[str(update.effective_chat.id)
-                     ]['keywords'].index(query.data)
-        data[str(update.effective_chat.id)]['keywords'].pop(index)
+            return REQUEST_PERIOD
+
+        if query.data in user_data['keywords']:
+            # remove the tapped keyword from the dict
+            user_data['keywords'].pop(query.data)
+
+            keyboard = []
+            for kw in user_data['keywords']:
+                keyboard.append(
+                    [
+                        InlineKeyboardButton(f'❌ {kw}', callback_data=kw),
+                        InlineKeyboardButton(
+                            f'💲 Limit {user_data["keywords"][kw]["max_price"]}', callback_data=kw + ':max_price'),
+                        InlineKeyboardButton(
+                            CRAIGSLIST_CATEGORIES[user_data['keywords'][kw]['category']].capitalize(), callback_data=kw + ':category')
+                    ]
+                )
+
+            keyboard.append(
+                [InlineKeyboardButton("✅ Done", callback_data='done'),
+                 InlineKeyboardButton("Cancel", callback_data='cancel')]
+            )
+
+            query.edit_message_text(
+                text=f'🗑️ Removed your keyword: "{query.data}"\n\nTap "✅ Done" to continue or send another keyword\n\nModify the max price or the cateogry by tapping them 👉',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return KEYWORDS
+
+        data_split = query.data.split(":")
+        # save the keyword the user selected
+        user_data['selected_keyword'] = data_split[0]
+        if 'category' == data_split[1]:
+            # prompt the user to select a category for this keyword
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        text=CRAIGSLIST_CATEGORIES[category].capitalize(),
+                        callback_data=category)
+                ] for category in CRAIGSLIST_CATEGORIES
+            ]
+            query.edit_message_text(
+                text="Please select the cateogry you wat to search in 👇",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+            return SELECT_CATEGORY
+
+        if 'max_price' == data_split[1]:
+            # prompt the user to send a price limit for this search
+            keyboard = [
+                [InlineKeyboardButton('No limit', callback_data='no_limit')]
+            ]
+            query.edit_message_text(
+                text="Plese send me a price limit (Numbers only! 🔢)",
+                reply_markup=InlineKeyboardMarkup(keyboard))
+            return PRICE
 
     else:
         # save the message from the user to the keywords
-        data[str(update.effective_chat.id)]['keywords'].append(
-            update.message.text)
+        # the way we save it is as a dict, with the keyword beign the key, and the value beign the price limit
+        data[str(update.effective_chat.id)
+             ]['keywords'][update.message.text] = {
+                 'category': 'foa',
+                 'max_price': None
+        }
 
     keyboard = []
-    for kw in data[str(update.effective_chat.id)]['keywords']:
-        keyboard.append([InlineKeyboardButton(f'❌ {kw}', callback_data=kw)])
+    for kw in user_data['keywords']:
+        keyboard.append(
+            [
+                InlineKeyboardButton(f'❌ {kw}', callback_data=kw),
+                InlineKeyboardButton(
+                    f'💲 Limit {user_data["keywords"][kw]["max_price"]}', callback_data=kw + ':max_price'),
+                InlineKeyboardButton(
+                    CRAIGSLIST_CATEGORIES[user_data['keywords'][update.message.text]['category']].capitalize(), callback_data=kw + ':category')
+            ]
+        )
 
-    keyboard.append([InlineKeyboardButton("✅ Done", callback_data='done'),
-                     InlineKeyboardButton("Cancel", callback_data='cancel')])
+    keyboard.append(
+        [InlineKeyboardButton("✅ Done", callback_data='done'),
+         InlineKeyboardButton("Cancel", callback_data='cancel')]
+    )
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f'💾 Saved your keywords:\n\n"{", ".join(data[str(update.effective_chat.id)]["keywords"])}"\n\nTap "Done" to continue or send me your keywords again to replace them',
+        text=f'💾 Saved your keyword: "{update.message.text}"\n\nTap "✅ Done" to continue or send me another keyword\n\nModify the max price or the cateogry by tapping them 👉',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
     return KEYWORDS
+
+
+def price_handler(update: Update, context: CallbackContext) -> int:
+    """Handles the user inputting a price limit for the search"""
+
+    query = update.callback_query
+    user_data = data[str(update.effective_chat.id)]
+
+    if query:
+        query.answer()
+
+        if query.data == 'cancel':
+            return cancel()
+
+        # prepare the keyboard
+        keyboard = [
+            [InlineKeyboardButton("No limit", callback_data='no_limit'),
+             InlineKeyboardButton("Cancel", callback_data='cancel')]
+        ]
+        query.edit_message_text(
+            text="Send me the price limit you want for this keyword",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        if query.data == 'no_limit':
+            query.edit_message_text(
+                text=f"Awesome! No 💲 limit on the search for {user_data['selected_keyword']}",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+    else:
+        # check that the message contains only numbers
+        if not update.message.text.isnumeric():
+            context.bot.send_message(
+                "Please only use numbers when setting up a price limit",
+                reply_markup=InlineKeyboardMarkup(
+                    [InlineKeyboardButton("✅ Done", callback_data='done'),
+                     InlineKeyboardButton("Cancel", callback_data='cancel')]
+                )
+            )
+            return PRICE
+
+        # save the price limit
+        user_data['keywords'][data[str(
+            update.effective_chat.id)]['selected_keyword']]['max_price'] = update.message.text
+
+        keyboard = []
+        for kw in user_data['keywords']:
+            keyboard.append(
+                [
+                    InlineKeyboardButton(f'❌ {kw}', callback_data=kw),
+                    InlineKeyboardButton(
+                        f'💲 Limit {user_data["keywords"][kw]["max_price"]}', callback_data=kw + ':max_price'),
+                    InlineKeyboardButton(CRAIGSLIST_CATEGORIES[user_data['keywords']
+                                                               [kw]['category']].capitalize(), callback_data=kw + ':category')
+                ]
+            )
+
+        keyboard.append(
+            [InlineKeyboardButton("✅ Done", callback_data='done'),
+             InlineKeyboardButton("Cancel", callback_data='cancel')]
+        )
+
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Saved the price limit for {user_data['selected_keyword']} as \"{update.message.text}\"",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
+        )
+
+        user_data['selected_keyword'] = None
+
+        return KEYWORDS
 
 
 def category_handler(update: Update, context: CallbackContext) -> int:
@@ -324,28 +470,40 @@ def category_handler(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
+    user_data = data[str(update.effective_chat.id)]
+
     if query.data == 'cancel':
         return cancel()
 
-    data[str(update.effective_chat.id)]['category'] = query.data
+    # save the selected category
+    user_data['keywords'][
+        user_data['selected_keyword']]['category'] = query.data
 
-    keyboard = [
-        [InlineKeyboardButton("5 minutes", callback_data='5'),
-            InlineKeyboardButton("10 minutes", callback_data='10')],
-        [InlineKeyboardButton("15 minutes", callback_data='15'),
-            InlineKeyboardButton("30 minutes", callback_data='30')],
-        [InlineKeyboardButton("60 minutes", callback_data='60'),
-            InlineKeyboardButton("90 minutes", callback_data='90')],
-        [InlineKeyboardButton("Just return the results now", callback_data='no_period'),
-            InlineKeyboardButton("Cancel", callback_data='cancel')]
-    ]
+    keyboard = []
+    for kw in user_data['keywords']:
+        keyboard.append(
+            [
+                InlineKeyboardButton(f'❌ {kw}', callback_data=kw),
+                InlineKeyboardButton(
+                    f'💲 Limit {user_data["keywords"][kw]["max_price"]}', callback_data=kw + ':max_price'),
+                InlineKeyboardButton(CRAIGSLIST_CATEGORIES[user_data['keywords']
+                                     [kw]['category']].capitalize(), callback_data=kw + ':category')
+            ]
+        )
+
+    keyboard.append(
+        [InlineKeyboardButton("✅ Done", callback_data='done'),
+         InlineKeyboardButton("Cancel", callback_data='cancel')]
+    )
 
     query.edit_message_text(
-        text=f'Excellent!\n\nSo we are looking for "{data[str(update.effective_chat.id)]["keywords"]}" in: "{CRAIGSLIST_CATEGORIES[data[str(update.effective_chat.id)]["category"]]}" 👀\n\nFinally, if you want me to return the results periodically, select a time to set up a schedule ⌚',
+        text=f'💾 Saved your changes!\n\nTap "Done" to continue or send me another keyword\n\nModify the max price or the cateogry by tapping them 👉',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    return REQUEST_PERIOD
+    user_data['selected_keyword'] = None
+
+    return KEYWORDS
 
 
 def period_handler(update: Update, context: CallbackContext) -> int:
@@ -354,16 +512,18 @@ def period_handler(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
+    user_data = data[str(update.effective_chat.id)]
+
     if query.data == 'no_period':
         # search craigslist using the given data
         pass
 
     # received a number, set up a schedule with the given data
-    data[str(update.effective_chat.id)]['chat_id'] = update.effective_chat.id
-    data[str(update.effective_chat.id)]['period'] = query.data
-    data[str(update.effective_chat.id)]['created'] = datetime.now().isoformat()
-    data[str(update.effective_chat.id)]['is_stopped'] = False
-    data[str(update.effective_chat.id)]['last_search_at'] = None
+    user_data['chat_id'] = update.effective_chat.id
+    user_data['period'] = query.data
+    user_data['created'] = datetime.now().isoformat()
+    user_data['is_stopped'] = False
+    user_data['last_search_at'] = None
 
     # write the job to jobs.json
     with open('jobs.json', 'w') as outfile:
@@ -376,7 +536,7 @@ def period_handler(update: Update, context: CallbackContext) -> int:
     if query.data != 'no_period':
         context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f'And have set up a schedule to look every {data[str(update.effective_chat.id)]["period"]} minutes ⏲️'
+            text=f'And have set up a schedule to look every {user_data["period"]} minutes ⏲️'
         )
 
     return ConversationHandler.END
