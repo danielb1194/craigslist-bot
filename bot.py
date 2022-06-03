@@ -166,10 +166,11 @@ def scheduled_search(context: CallbackContext) -> None:
 
                 approx_result_count = cl_search.get_results_approx_count()
                 if not approx_result_count or approx_result_count == 0:
-                    context.bot.send_message(
-                        chat_id=data[key]['chat_id'],
-                        text=f'Your search for "{kw}" in {city["text"]} is empty 🤔'
-                    )
+                    # removed empty results message as per client's request
+                    # context.bot.send_message(
+                    #     chat_id=data[key]['chat_id'],
+                    #     text=f'Your search for "{kw}" in {city["text"]} is empty 🤔'
+                    # )
                     continue
 
                 context.bot.send_message(
@@ -188,10 +189,11 @@ def scheduled_search(context: CallbackContext) -> None:
                     text=f'These are the results from your scheduled search for "{kw}" in {city["text"]} 👆\n\nYou are receiving these results every {data[key]["period"]} minutes'
                 )
 
-        context.bot.send_message(
-            chat_id=data[key]['chat_id'],
-            text=f'Use /stop to stop receiving these results'
-        )
+        # Removed this message as per the client's request
+        # context.bot.send_message(
+        #     chat_id=data[key]['chat_id'],
+        #     text=f'Use /stop to stop receiving these results'
+        # )
 
 
 if __name__ == '__main__':
